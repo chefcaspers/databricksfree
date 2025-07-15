@@ -9,7 +9,7 @@ DEFAULT_VOLUME_NAME = 'raw_data'
 DEFAULT_ALL_EVENTS_TABLE_NAME = f'{DEFAULT_CATALOG_NAME}.{DEFAULT_SCHEMA_NAME}.all_events'
 
 # Default data paths
-DATA_DIR = Path('../data')
+DATA_DIR = Path('/data')
 DEFAULT_SOURCE_GZ_FILE = os.path.join(DATA_DIR, 'raw_events.json.gz')
 DEFAULT_VOLUME_PATH = f"/Volumes/{DEFAULT_CATALOG_NAME}/{DEFAULT_SCHEMA_NAME}/{DEFAULT_VOLUME_NAME}"
 DEFAULT_VOLUME_GZ_FILE = f"{DEFAULT_VOLUME_PATH}/raw_events.json.gz"
