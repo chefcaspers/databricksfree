@@ -25,7 +25,7 @@ def setup_catalog_and_volume(spark, catalog_name=DEFAULT_CATALOG_NAME, schema_na
     print(f"✅ Unity Catalog objects ready: {catalog_name}.{schema_name}.{volume_name}")
 
 
-def copy_to_volume(
+def copy_raw_data_to_volume(
     source_gz_file=DEFAULT_SOURCE_GZ_FILE,
     volume_gz_file=DEFAULT_VOLUME_GZ_FILE
 ):
@@ -54,3 +54,12 @@ def initialize_events_table(
 
 def drop_gk_demo_catalog(spark, catalog_name=DEFAULT_CATALOG_NAME):
     spark.sql(f"DROP CATALOG IF EXISTS {catalog_name} CASCADE")
+
+
+# USAGE
+# From a notebook in the root directory, run:
+## from utils.utils import setup_catalog_and_volume, drop_gk_demo_catalog, copy_raw_data_to_volume, initialize_events_table
+## drop_gk_demo_catalog(spark)
+## setup_catalog_and_volume(spark)
+## copy_raw_data_to_volume()
+## initialize_events_table(spark)
