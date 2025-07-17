@@ -1,0 +1,457 @@
+{
+  "datasets": [
+    {
+      "name": "bd494c80",
+      "displayName": "gross_revenue_today",
+      "queryLines": [
+        "SELECT\n",
+        "  SUM(brand_revenue)              AS value,\n",
+        "  'Gross Revenue Today'           AS label\n",
+        "FROM gk_demo.lakeflow.dlt_brand_sales_day\n",
+        "--WHERE day = current_date();        -- session TZ assumed PST"
+      ],
+      "catalog": "analysis",
+      "schema": "data"
+    },
+    {
+      "name": "bdc06c97",
+      "displayName": "orders",
+      "queryLines": [
+        "SELECT\n",
+        "  COUNT(order_id)                 AS value,\n",
+        "  'Orders Today (HLL ±2 %)'       AS label\n",
+        "FROM gk_demo.lakeflow.dlt_order_header\n",
+        "--WHERE order_day = current_date();"
+      ],
+      "catalog": "analysis",
+      "schema": "data"
+    },
+    {
+      "name": "e122b3b6",
+      "displayName": "average basket size",
+      "queryLines": [
+        "WITH orders AS (\n",
+        "    SELECT order_id, total_qty, order_revenue\n",
+        "    FROM   gk_demo.lakeflow.dlt_order_header\n",
+        "    --WHERE  order_day = current_date()\n",
+        ")\n",
+        "SELECT\n",
+        "  ROUND(AVG(total_qty), 2)        AS avg_basket_qty,\n",
+        "  ROUND(AVG(order_revenue), 2)    AS avg_basket_total_price\n",
+        "FROM orders;"
+      ],
+      "catalog": "analysis",
+      "schema": "data"
+    },
+    {
+      "name": "3f2fae12",
+      "displayName": "run-rate vs goal",
+      "queryLines": [
+        "SELECT\n",
+        "  SUM(brand_revenue)               AS revenue,\n",
+        "  :goal_dollars                AS goal,\n",
+        "  SUM(brand_revenue)/:goal_dollars AS pct\n",
+        "FROM gk_demo.lakeflow.dlt_brand_sales_day\n",
+        "--WHERE day = current_date();"
+      ],
+      "parameters": [
+        {
+          "displayName": "goal_dollars",
+          "keyword": "goal_dollars",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "250000"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "catalog": "analysis",
+      "schema": "data"
+    },
+    {
+      "name": "022514c3",
+      "displayName": "hourly revenue trend",
+      "queryLines": [
+        "SELECT\n",
+        "    hour_ts,\n",
+        "    location,\n",
+        "    SUM(revenue) AS revenue\n",
+        "FROM gk_demo.lakeflow.dlt_location_sales_hourly\n",
+        "-- WHERE hour_ts >= date_trunc('day', current_timestamp() - INTERVAL 1 DAY)   -- today only\n",
+        "GROUP BY hour_ts, location\n",
+        "ORDER BY hour_ts, location;\n"
+      ],
+      "catalog": "analysis",
+      "schema": "data"
+    }
+  ],
+  "pages": [
+    {
+      "name": "00b73b53",
+      "displayName": "Untitled page",
+      "layout": [
+        {
+          "widget": {
+            "name": "226684f1",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "bdc06c97",
+                  "fields": [
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "value",
+                  "displayName": "value"
+                }
+              },
+              "frame": {
+                "title": "Daily (UTC) Number of Orders",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 0,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "ed33869e",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "e122b3b6",
+                  "fields": [
+                    {
+                      "name": "avg_basket_qty",
+                      "expression": "`avg_basket_qty`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg_basket_qty",
+                  "displayName": "avg_basket_qty"
+                }
+              },
+              "frame": {
+                "title": "Num Items Per Order",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "0ed161c5",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "3f2fae12",
+                  "fields": [
+                    {
+                      "name": "goal",
+                      "expression": "`goal`"
+                    },
+                    {
+                      "name": "sum(revenue)",
+                      "expression": "SUM(`revenue`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(revenue)",
+                  "format": {
+                    "type": "number-currency",
+                    "currencyCode": "USD",
+                    "abbreviation": "compact",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 2
+                    }
+                  },
+                  "style": {
+                    "color": {
+                      "themeColorType": "visualizationColors",
+                      "position": 2
+                    },
+                    "fontSize": 36,
+                    "rules": [
+                      {
+                        "condition": {
+                          "operator": ">"
+                        },
+                        "color": {
+                          "themeColorType": "visualizationColors",
+                          "position": 3
+                        }
+                      }
+                    ]
+                  },
+                  "displayName": "Sum of revenue"
+                },
+                "target": {
+                  "fieldName": "goal",
+                  "style": {
+                    "bold": true,
+                    "color": {
+                      "themeColorType": "visualizationColors",
+                      "position": 3
+                    },
+                    "fontSize": 36
+                  },
+                  "displayName": "goal"
+                }
+              },
+              "frame": {
+                "title": "Daily (UTC) Revenue vs. Goal (green)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "e12d3860",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "022514c3",
+                  "fields": [
+                    {
+                      "name": "location",
+                      "expression": "`location`"
+                    },
+                    {
+                      "name": "hour_ts",
+                      "expression": "`hour_ts`"
+                    },
+                    {
+                      "name": "sum(revenue)",
+                      "expression": "SUM(`revenue`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "area",
+              "encodings": {
+                "x": {
+                  "fieldName": "hour_ts",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "hour_ts"
+                },
+                "y": {
+                  "fieldName": "sum(revenue)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "format": {
+                    "type": "number-currency",
+                    "currencyCode": "USD",
+                    "abbreviation": "compact",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 2
+                    }
+                  },
+                  "displayName": "Sum of revenue"
+                },
+                "color": {
+                  "fieldName": "location",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "location"
+                }
+              },
+              "frame": {
+                "showTitle": false
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 6,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "19ed9308",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "e122b3b6",
+                  "fields": [
+                    {
+                      "name": "avg_basket_total_price",
+                      "expression": "`avg_basket_total_price`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg_basket_total_price",
+                  "displayName": "avg_basket_total_price"
+                }
+              },
+              "frame": {
+                "title": "Total $",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 1,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "27834bc6",
+            "multilineTextboxSpec": {
+              "lines": [
+                "__Order Averages__"
+              ]
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "13af1597",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "bd494c80",
+                  "fields": [
+                    {
+                      "name": "label",
+                      "expression": "`label`"
+                    },
+                    {
+                      "name": "sum(value)",
+                      "expression": "SUM(`value`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "label",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "y-reversed"
+                    }
+                  },
+                  "displayName": "label"
+                },
+                "y": {
+                  "fieldName": "sum(value)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Sum of value"
+                }
+              },
+              "frame": {
+                "title": "Gross Revenue by Label",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 13,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    }
+  }
+}
