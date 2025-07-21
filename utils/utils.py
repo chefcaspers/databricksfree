@@ -52,6 +52,70 @@ def initialize_events_table(
     df.write.format("delta").mode("overwrite").saveAsTable(table_name)
     print(f"✅ Table {table_name} created")
 
+def initialize_dimension_tables(
+    spark,
+    data_dir=DATA_DIR,
+    catalog=DEFAULT_CATALOG_NAME,
+    schema=DEFAULT_SCHEMA_NAME
+):
+    brands_df = spark.read.parquet(str(data_dir / "brands.parquet"))
+    menus_df = spark.read.parquet(str(data_dir / "menus.parquet"))
+    categories_df = spark.read.parquet(str(data_dir / "categories.parquet"))
+    items_df = spark.read.parquet(str(data_dir / "items.parquet"))
+
+    spark.sql(f"""
+        CREATE TABLE IF NOT EXISTS {catalog}.{schema}.brand (
+        id   BIGINT NOT NULL,
+        name STRING NOT NULL,
+        CONSTRAINT brand_pk PRIMARY KEY (id)
+    )""")
+
+    spark.sql(f"""
+        CREATE TABLE IF NOT EXISTS {catalog}.{schema}.menu (
+        id       BIGINT NOT NULL,
+        name     STRING NOT NULL,
+        brand_id BIGINT NOT NULL,
+
+        CONSTRAINT menu_pk        PRIMARY KEY (id),
+        CONSTRAINT menu_brand_fk  FOREIGN KEY (brand_id)
+            REFERENCES {catalog}.{schema}.brand(id)
+    )""")
+
+    spark.sql(f"""
+        CREATE TABLE IF NOT EXISTS {catalog}.{schema}.category (
+        id       BIGINT NOT NULL,
+        name     STRING NOT NULL,
+        menu_id  BIGINT NOT NULL,
+        brand_id BIGINT NOT NULL,
+
+        CONSTRAINT category_pk         PRIMARY KEY (id),
+        CONSTRAINT category_menu_fk    FOREIGN KEY (menu_id)
+            REFERENCES {catalog}.{schema}.menu(id),
+        CONSTRAINT category_brand_fk   FOREIGN KEY (brand_id)
+            REFERENCES {catalog}.{schema}.brand(id)
+    )""")
+
+    spark.sql(f"""
+        CREATE TABLE IF NOT EXISTS {catalog}.{schema}.item (
+        id          BIGINT NOT NULL,
+        name        STRING NOT NULL,
+        description STRING,
+        price       DOUBLE NOT NULL,
+        image_data  STRING,
+
+        brand_id    BIGINT NOT NULL,
+        menu_id     BIGINT NOT NULL,
+        category_id BIGINT NOT NULL,
+
+        CONSTRAINT item_pk            PRIMARY KEY (id),
+        CONSTRAINT item_brand_fk      FOREIGN KEY (brand_id)
+            REFERENCES {catalog}.{schema}.brand(id),
+        CONSTRAINT item_menu_fk       FOREIGN KEY (menu_id)
+            REFERENCES {catalog}.{schema}.menu(id),
+        CONSTRAINT item_category_fk   FOREIGN KEY (category_id)
+            REFERENCES {catalog}.{schema}.category(id)
+    )""")
+
 def drop_gk_demo_catalog(spark, catalog_name=DEFAULT_CATALOG_NAME):
     spark.sql(f"DROP CATALOG IF EXISTS {catalog_name} CASCADE")
 
