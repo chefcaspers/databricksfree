@@ -48,9 +48,10 @@ def initialize_events_table(
     """
     Read the gzipped JSON file from the volume and write it as a Delta table.
     """
-    df = spark.read.json(volume_gz_file)
-    df.write.format("delta").mode("overwrite").saveAsTable(table_name)
-    print(f"✅ Table {table_name} created")
+    if not spark.catalog.tableExists(table_name):
+        df = spark.read.json(volume_gz_file)
+        df.write.format("delta").mode("overwrite").saveAsTable(table_name)
+    print(f"✅ Table {table_name} created or already exists")
 
 def drop_gk_demo_catalog(spark, catalog_name=DEFAULT_CATALOG_NAME):
     spark.sql(f"DROP CATALOG IF EXISTS {catalog_name} CASCADE")
