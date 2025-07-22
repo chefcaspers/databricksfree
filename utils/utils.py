@@ -3,19 +3,29 @@ import shutil
 from pathlib import Path
 
 # Default configuration
-DEFAULT_CATALOG_NAME = 'gk_demo'
-DEFAULT_SCHEMA_NAME = 'default'
-DEFAULT_VOLUME_NAME = 'raw_data'
-DEFAULT_ALL_EVENTS_TABLE_NAME = f'{DEFAULT_CATALOG_NAME}.{DEFAULT_SCHEMA_NAME}.all_events'
+DEFAULT_CATALOG_NAME = "gk_demo"
+DEFAULT_SCHEMA_NAME = "default"
+DEFAULT_VOLUME_NAME = "raw_data"
+DEFAULT_ALL_EVENTS_TABLE_NAME = (
+    f"{DEFAULT_CATALOG_NAME}.{DEFAULT_SCHEMA_NAME}.all_events"
+)
+DEFAULT_ORDER_DELIVERY_TIMES_VIEW_NAME = f"{DEFAULT_CATALOG_NAME}.{DEFAULT_SCHEMA_NAME}.order_delivery_times_per_location_view"
 
 # Default data paths
-DATA_DIR = Path('/data')
-DEFAULT_SOURCE_GZ_FILE = os.path.join(DATA_DIR, 'raw_events.json.gz')
-DEFAULT_VOLUME_PATH = f"/Volumes/{DEFAULT_CATALOG_NAME}/{DEFAULT_SCHEMA_NAME}/{DEFAULT_VOLUME_NAME}"
+DATA_DIR = Path("data")
+DEFAULT_SOURCE_GZ_FILE = os.path.join(DATA_DIR, "raw_events.json.gz")
+DEFAULT_VOLUME_PATH = (
+    f"/Volumes/{DEFAULT_CATALOG_NAME}/{DEFAULT_SCHEMA_NAME}/{DEFAULT_VOLUME_NAME}"
+)
 DEFAULT_VOLUME_GZ_FILE = f"{DEFAULT_VOLUME_PATH}/raw_events.json.gz"
 
 
-def setup_catalog_and_volume(spark, catalog_name=DEFAULT_CATALOG_NAME, schema_name=DEFAULT_SCHEMA_NAME, volume_name=DEFAULT_VOLUME_NAME):
+def setup_catalog_and_volume(
+    spark,
+    catalog_name=DEFAULT_CATALOG_NAME,
+    schema_name=DEFAULT_SCHEMA_NAME,
+    volume_name=DEFAULT_VOLUME_NAME,
+):
     """
     Create Unity Catalog objects if they do not exist.
     """
@@ -26,8 +36,7 @@ def setup_catalog_and_volume(spark, catalog_name=DEFAULT_CATALOG_NAME, schema_na
 
 
 def copy_raw_data_to_volume(
-    source_gz_file=DEFAULT_SOURCE_GZ_FILE,
-    volume_gz_file=DEFAULT_VOLUME_GZ_FILE
+    source_gz_file=DEFAULT_SOURCE_GZ_FILE, volume_gz_file=DEFAULT_VOLUME_GZ_FILE
 ):
     """
     Copy the gzipped JSON file to the specified volume path if it does not already exist.
@@ -43,14 +52,55 @@ def copy_raw_data_to_volume(
 def initialize_events_table(
     spark,
     volume_gz_file=DEFAULT_VOLUME_GZ_FILE,
-    table_name=DEFAULT_ALL_EVENTS_TABLE_NAME
+    table_name=DEFAULT_ALL_EVENTS_TABLE_NAME,
 ):
     """
     Read the gzipped JSON file from the volume and write it as a Delta table.
     """
-    df = spark.read.json(volume_gz_file)
-    df.write.format("delta").mode("overwrite").saveAsTable(table_name)
-    print(f"✅ Table {table_name} created")
+    if not spark.catalog.tableExists(table_name):
+        df = spark.read.json(volume_gz_file)
+        df.write.format("delta").mode("overwrite").saveAsTable(table_name)
+    print(f"✅ Table {table_name} created or already exists")
+
+
+def initialize_order_delivery_times_view(
+    spark, table_name=DEFAULT_ORDER_DELIVERY_TIMES_VIEW_NAME
+):
+    spark.sql(f"""
+    CREATE OR REPLACE VIEW {DEFAULT_ORDER_DELIVERY_TIMES_VIEW_NAME} AS
+WITH order_times AS (
+  SELECT
+    order_id,
+    location,
+    MAX(CASE WHEN event_type = 'order_created' THEN try_to_timestamp(ts) END) AS order_created_time,
+    MAX(CASE WHEN event_type = 'delivered' THEN try_to_timestamp(ts) END) AS delivered_time
+  FROM
+    gk_demo.default.all_events
+  GROUP BY
+    order_id,
+    location
+),
+total_order_times AS (
+  SELECT
+    order_id,
+    location,
+    (UNIX_TIMESTAMP(delivered_time) - UNIX_TIMESTAMP(order_created_time)) / 60 AS total_order_time_minutes
+  FROM
+    order_times
+  WHERE
+    order_created_time IS NOT NULL
+    AND delivered_time IS NOT NULL
+)
+SELECT
+  location,
+  PERCENTILE(total_order_time_minutes, 0.50) AS P50,
+  PERCENTILE(total_order_time_minutes, 0.75) AS P75,
+  PERCENTILE(total_order_time_minutes, 0.99) AS P99
+FROM
+  total_order_times
+GROUP BY
+  location""")
+
 
 def initialize_dimension_tables(
     spark,
