@@ -12,7 +12,7 @@ DEFAULT_ALL_EVENTS_TABLE_NAME = (
 DEFAULT_ORDER_DELIVERY_TIMES_VIEW_NAME = f"{DEFAULT_CATALOG_NAME}.{DEFAULT_SCHEMA_NAME}.order_delivery_times_per_location_view"
 
 # Default data paths
-DATA_DIR = Path("/data")
+DATA_DIR = Path("data")
 DEFAULT_SOURCE_GZ_FILE = os.path.join(DATA_DIR, "raw_events.json.gz")
 DEFAULT_VOLUME_PATH = (
     f"/Volumes/{DEFAULT_CATALOG_NAME}/{DEFAULT_SCHEMA_NAME}/{DEFAULT_VOLUME_NAME}"
@@ -67,7 +67,7 @@ def initialize_order_delivery_times_view(
     spark, table_name=DEFAULT_ORDER_DELIVERY_TIMES_VIEW_NAME
 ):
     spark.sql(f"""
-    CREATE OR REPLACE VIEW {table_name} AS
+    CREATE OR REPLACE VIEW {DEFAULT_ORDER_DELIVERY_TIMES_VIEW_NAME} AS
 WITH order_times AS (
   SELECT
     order_id,
@@ -76,8 +76,6 @@ WITH order_times AS (
     MAX(CASE WHEN event_type = 'delivered' THEN try_to_timestamp(ts) END) AS delivered_time
   FROM
     gk_demo.default.all_events
-  WHERE
-    try_to_timestamp(ts) >= CURRENT_TIMESTAMP() - INTERVAL 1 DAY
   GROUP BY
     order_id,
     location
