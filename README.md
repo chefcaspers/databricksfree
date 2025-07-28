@@ -39,3 +39,4 @@ Enter the URL of this repository (`https://github.com/chefcaspers/databricksfree
 Each notebook in the repository's root directory is a standalone demo. You can run them in any order, and each one is designed to be self-contained. The demos are:
 
 - [Agents](agents.ipynb): This demo shows how to register Unity Catalog functions and allow AI models to call them via the Databricks Mosaic AI Playground.
+- [Lakeflow](lakeflow.ipynb): This demo shows how to use Declarative Pipelines to create a Medallion architecture that reads events from JSON, normalizes the data, and publishes gold summary tables.
