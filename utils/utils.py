@@ -6,6 +6,7 @@ from pathlib import Path
 DEFAULT_CATALOG_NAME = "gk_demo"
 DEFAULT_SCHEMA_NAME = "default"
 DEFAULT_VOLUME_NAME = "raw_data"
+DEFAULT_CHECKPOINTS_NAME = "checkpoints"
 DEFAULT_ALL_EVENTS_TABLE_NAME = (
     f"{DEFAULT_CATALOG_NAME}.{DEFAULT_SCHEMA_NAME}.all_events"
 )
@@ -25,6 +26,7 @@ def setup_catalog_and_volume(
     catalog_name=DEFAULT_CATALOG_NAME,
     schema_name=DEFAULT_SCHEMA_NAME,
     volume_name=DEFAULT_VOLUME_NAME,
+    checkpoints_name=DEFAULT_CHECKPOINTS_NAME
 ):
     """
     Create Unity Catalog objects if they do not exist.
@@ -32,6 +34,7 @@ def setup_catalog_and_volume(
     spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog_name}")
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog_name}.{schema_name}")
     spark.sql(f"CREATE VOLUME IF NOT EXISTS {catalog_name}.{schema_name}.{volume_name}")
+    spark.sql(f"CREATE VOLUME IF NOT EXISTS {catalog_anem}.{schema_name}.{checkpoints_name})
     print(f"✅ Unity Catalog objects ready: {catalog_name}.{schema_name}.{volume_name}")
 
 
