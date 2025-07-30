@@ -1,0 +1,259 @@
+<!-- order-tracker.html  – single-file demo (dark UI + Leaflet + status pills + smart refresh) -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Caspers Active Orders</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- ─────────── STYLE ─────────── -->
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  background:#0d111b;color:#d4d7e2;line-height:1.4;
+}
+/* top bar ------------------------------------------------------------- */
+.navbar{display:flex;justify-content:space-between;align-items:center;padding:14px 32px;border-bottom:1px solid #1a2233}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;color:#fff}
+nav a{color:#8b93aa;text-decoration:none;font-size:14px;margin:0 10px;position:relative}
+nav a.active{color:#fff}
+nav a.active::after{content:"";position:absolute;left:0;right:0;bottom:-12px;height:2px;background:#2f8cff;border-radius:2px}
+.avatar{width:32px;height:32px;border-radius:50%;background:#444}
+
+/* loader -------------------------------------------------------------- */
+#loader{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0d111b;color:#fff;font-size:18px;z-index:9999}
+
+/* wrapper ------------------------------------------------------------- */
+main{max-width:1100px;margin:32px auto}
+
+/* table --------------------------------------------------------------- */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:14px;border-bottom:1px solid #262d3f;text-align:left;vertical-align:top}
+th{color:#9499b0;font-weight:500}
+tr:hover{background:#111826;cursor:pointer}
+tr.selected{background:#1a2336}
+.nowrap{white-space:nowrap}
+.ellipsis{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
+
+/* status pills -------------------------------------------------------- */
+.pill{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;color:#fff;text-transform:capitalize}
+.pill.waiting   {background:#7478a8}
+.pill.preparing {background:#ffb82f;color:#000}
+.pill.wait-driver{background:#ff8155;color:#000}
+.pill.ontheway  {background:#2f8cff}
+
+/* expansion row ------------------------------------------------------- */
+.expandRow td{border:0;background:#0f1624;padding:0}
+.detailWrapper{display:flex;gap:20px;padding:20px}
+.mapPane{flex:1;height:350px}
+.dashPane{flex:1;height:350px;border:0;background:#0d111b}
+
+/* mobile -------------------------------------------------------------- */
+@media(max-width:768px){
+  .detailWrapper{flex-direction:column;height:auto}
+  .mapPane,.dashPane{height:260px}
+  .ellipsis{max-width:100%}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<header class="navbar">
+  <div class="brand">Caspers</div>
+  <nav><a class="active" href="#">Active Orders</a></nav>
+</header>
+
+<!-- LOADER -->
+<div id="loader">Loading…</div>
+
+<!-- MAIN -->
+<main>
+  <h2 style="color:#fff;margin-bottom:18px">Orders</h2>
+  <table id="orderTable">
+    <thead>
+      <tr>
+        <th class="nowrap">ID</th>
+        <th>Location</th>
+        <th>Delivery&nbsp;Address</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</main>
+
+<!-- SCRIPT -->
+<script>
+/* ---------- helpers ---------- */
+const firstEvent=(evts,t)=>evts.find(e=>e.event_type===t);
+const allEvents  =(evts,t)=>evts.filter(e=>e.event_type===t);
+
+/* ---------- state ---------- */
+let orders=[], currentOrderId=null;
+let map=null, layerGroup=null;
+let firstLoad=true;
+
+/* ---------- status logic ---------- */
+function resolveStatus(evts){
+  const types = evts.map(e=>e.event_type);
+  if (types.includes('driver_picked_up'))                 return 'On the way';
+  if (types.includes('gk_finished') && !types.includes('driver_arrived'))
+                                                         return 'Waiting on driver';
+  const latest   = evts.reduce((a,b)=>new Date(a.ts)>new Date(b.ts)?a:b);
+  if (latest.event_type==='gk_started')                  return 'Preparing';
+  return 'Waiting for Kitchen';
+}
+const statusClass={
+  'Waiting for Kitchen':'waiting',
+  'Preparing':'preparing',
+  'Waiting on driver':'wait-driver',
+  'On the way':'ontheway'
+};
+
+/* ---------- fetch & refresh ---------- */
+async function fetchOrders(){
+  try{
+    if(firstLoad) document.getElementById('loader').style.display='flex';
+
+    const raw = await (await fetch('/api/orders')).json();
+
+    orders = raw.map(o=>{
+      const evts   = o.events;
+      const created= firstEvent(evts,'order_created');
+      const cBody  = JSON.parse((created?.body)||'{}');
+
+      return {
+        order_id : o.order_id,
+        short_id : o.order_id.slice(0,6),
+        location : created.location || cBody.location || '—',
+        address  : cBody.customer_addr || '—',
+        status   : resolveStatus(evts),
+        events   : evts
+      };
+    });
+
+    populateTable();
+    restoreSelection();
+  }catch(err){console.error(err);}
+  finally{
+    if(firstLoad){
+      document.getElementById('loader').style.display='none';
+      firstLoad=false;
+    }
+  }
+}
+
+/* ---------- table render ---------- */
+function populateTable(){
+  const tbody=document.querySelector('#orderTable tbody');
+  tbody.innerHTML = orders.map(o=>`
+    <tr data-id="${o.order_id}">
+      <td class="nowrap">${o.short_id}</td>
+      <td>${o.location}</td>
+      <td class="ellipsis" title="${o.address}">${o.address}</td>
+      <td><span class="pill ${statusClass[o.status]}">${o.status}</span></td>
+    </tr>`).join('');
+
+  tbody.querySelectorAll('tr').forEach(tr=>tr.addEventListener('click',()=>toggleRow(tr)));
+}
+
+/* ---------- row toggle ---------- */
+function toggleRow(row){
+  const id=row.dataset.id;
+  if(currentOrderId===id){ collapseDetail(); return; }  // second click collapses
+
+  collapseDetail();            // close current (if any)
+  openRow(row);                // open new
+}
+
+function openRow(row){
+  currentOrderId = row.dataset.id;
+  row.classList.add('selected');
+
+  const exp = document.createElement('tr');
+  exp.className = 'expandRow';
+  const cell = document.createElement('td');
+  cell.colSpan = 4;
+  cell.innerHTML = `
+    <div class="detailWrapper">
+      <div id="map"  class="mapPane"></div>
+      <iframe id="dashFrame" class="dashPane" src="about:blank"></iframe>
+    </div>`;
+  exp.appendChild(cell);
+  row.after(exp);
+
+  /* 👉 set iframe src here */
+  document.getElementById('dashFrame').src =
+    `https://dbc-46d4672a-d1bd.cloud.databricks.com/embed/dashboardsv3/01f0376e0ab41bf28e240fdd68315811?o=2947840311790182&f_2650ce51~e84d6c37=${currentOrderId}`;
+
+  initMap(currentOrderId);
+}
+
+/* collapse helper */
+function collapseDetail(){
+  document.querySelectorAll('#orderTable tr.selected').forEach(r=>r.classList.remove('selected'));
+  const exp=document.querySelector('.expandRow');
+  if(exp) exp.remove();
+  if(map){ map.remove(); map=null; }
+  currentOrderId=null;
+}
+
+/* restore selection after refresh */
+function restoreSelection(){
+  if(!currentOrderId) return;
+  const row=document.querySelector(`#orderTable tbody tr[data-id="${currentOrderId}"]`);
+  if(row){ openRow(row); } else { collapseDetail(); }
+}
+
+/* ---------- map drawing ---------- */
+function initMap(id){
+  if(map){ map.remove(); }
+  map=L.map('map',{zoomControl:false}).setView([20,0],2);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
+  layerGroup=L.layerGroup().addTo(map);
+
+  const order = orders.find(x=>x.order_id===id);
+  if(!order) return;
+  const evts=order.events;
+
+  const created=firstEvent(evts,'order_created');
+  const cBody=JSON.parse((created?.body)||'{}');
+  const dest=[cBody.customer_lat,cBody.customer_lon];
+
+  const pu=firstEvent(evts,'driver_picked_up');
+  const fullRoute=pu?JSON.parse(pu.body).route_points:[];
+  const origin=fullRoute[0]||null;
+
+  const pingObjs=allEvents(evts,'driver_ping').map(e=>JSON.parse(e.body));
+  const pingPts=pingObjs.map(p=>[p.loc_lat,p.loc_lon]);
+  const lastPing=pingPts.at(-1);
+
+  let routeSoFar=[];
+  if(fullRoute.length&&lastPing){
+    const idx=fullRoute.findIndex(pt=>pt[0]===lastPing[0]&&pt[1]===lastPing[1]);
+    if(idx>=0) routeSoFar=fullRoute.slice(0,idx+1);
+  }
+  if(!routeSoFar.length&&origin&&lastPing) routeSoFar=[origin,lastPing];
+
+  if(fullRoute.length) L.polyline(fullRoute,{color:'#555',weight:4,opacity:0.3,interactive:false}).addTo(layerGroup);
+  if(routeSoFar.length>1) L.polyline(routeSoFar,{color:'#e60000',weight:6,opacity:0.9}).addTo(layerGroup);
+  pingPts.forEach(pt=>L.circleMarker(pt,{radius:4,color:'#0077ff',fillColor:'#0077ff',fillOpacity:0.6,opacity:0.6,interactive:false}).addTo(layerGroup));
+  if(origin) L.marker(origin).bindTooltip('🅂 Ghost Kitchen',{permanent:true,offset:[0,-15]}).addTo(layerGroup);
+  L.marker(dest).bindTooltip('🏁 Customer',{permanent:true,offset:[0,-15]}).addTo(layerGroup);
+
+  const bounds=L.latLngBounds([dest,...fullRoute]);
+  map.fitBounds(bounds.isValid()?bounds:[dest],{padding:[30,30]});
+}
+
+/* ---------- run ---------- */
+fetchOrders();                     // initial with loader
+setInterval(fetchOrders,30_000);   // silent refresh every 30 s
+</script>
+</body>
+</html>
